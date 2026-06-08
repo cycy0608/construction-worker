@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.tunnel-url
+*.db
+uploads/*
+!uploads/.gitkeep
+PortableGit/
+PortableGit.exe
+Git-installer.exe
+debug.log

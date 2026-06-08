@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: construction-worker
+    env: node
+    buildCommand: cd client && npm install && npm run build && cd ../server && npm install
+    startCommand: cd server && node index.js
+    envVars:
+      - key: BAIDU_OCR_API_KEY
+        value: CuYSI2BmIrF0r4e9cCebwFzg
+      - key: BAIDU_OCR_SECRET_KEY
+        value: 1MpbA7CVzzJKoXQNsStYKtC5Bv8v8gh9
+    plan: free
+    autoDeploy: false

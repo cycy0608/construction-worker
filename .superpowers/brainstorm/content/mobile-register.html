@@ -1,0 +1,93 @@
+<h2>扫码登记页面设计（手机端）</h2>
+<p class="subtitle">临时人员扫码后看到的登记页面，流程分3步完成</p>
+
+<div class="section">
+  <h3>页面整体布局</h3>
+  <div class="mockup" style="max-width: 390px; margin: 0 auto;">
+    <div class="mockup-header">工地临时人员进场登记</div>
+    <div class="mockup-body" style="padding: 0;">
+      <!-- 进度条 -->
+      <div style="display: flex; background: #f0f0f0; padding: 12px 16px; gap: 8px;">
+        <div style="background: #0052d9; color: #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold;">1</div>
+        <div style="flex: 1; display: flex; align-items: center; color: #0052d9; font-size: 13px; font-weight: 500;">身份认证</div>
+        <div style="background: #e0e0e0; color: #999; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 13px;">2</div>
+        <div style="flex: 1; display: flex; align-items: center; color: #999; font-size: 13px;">填写信息</div>
+        <div style="background: #e0e0e0; color: #999; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 13px;">3</div>
+        <div style="flex: 1; display: flex; align-items: center; color: #999; font-size: 13px;">安全确认</div>
+      </div>
+
+      <!-- 步骤1：身份证上传 -->
+      <div style="padding: 16px;">
+        <div style="font-size: 15px; font-weight: 600; color: #333; margin-bottom: 12px;">第一步：上传身份证</div>
+        
+        <div style="border: 2px dashed #ccc; border-radius: 8px; padding: 24px; text-align: center; background: #fafafa; cursor: pointer;">
+          <div style="font-size: 36px; margin-bottom: 8px;">📷</div>
+          <div style="color: #0052d9; font-size: 14px; font-weight: 500;">点击拍照或上传身份证正面</div>
+          <div style="color: #999; font-size: 12px; margin-top: 4px;">系统自动识别姓名、身份证号</div>
+        </div>
+
+        <div style="margin-top: 16px; padding: 12px; background: #f0f9eb; border-radius: 6px; border-left: 3px solid #2ba471;">
+          <div style="font-size: 12px; color: #666; margin-bottom: 4px;">识别结果（自动填充）</div>
+          <div style="font-size: 14px; color: #333;"><strong>姓名：</strong>张三</div>
+          <div style="font-size: 14px; color: #333;"><strong>身份证号：</strong>320***********1234</div>
+        </div>
+
+        <!-- 人脸拍照 -->
+        <div style="margin-top: 16px;">
+          <div style="font-size: 14px; font-weight: 500; color: #333; margin-bottom: 8px;">人脸照片采集（人证比对）</div>
+          <div style="border: 2px dashed #ccc; border-radius: 8px; padding: 20px; text-align: center; background: #fafafa;">
+            <div style="font-size: 28px; margin-bottom: 4px;">🤳</div>
+            <div style="color: #0052d9; font-size: 14px;">点击拍摄人脸照片</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 20px; text-align: center;">
+          <button class="mock-button" style="width: 100%; background: #0052d9; color: #fff; padding: 12px; border: none; border-radius: 6px; font-size: 15px; cursor: pointer;">下一步 →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>步骤2 &amp; 3 预览</h3>
+  <div class="split">
+    <div class="mockup" style="max-width: 320px;">
+      <div class="mockup-header">第二步：填写信息</div>
+      <div class="mockup-body" style="padding: 12px;">
+        <div style="font-size: 13px; margin-bottom: 8px; color: #525252;">班组</div>
+        <input class="mock-input" placeholder="如：钢筋班 / 木工班" style="width: 100%; box-sizing: border-box;">
+        <div style="font-size: 13px; margin: 12px 0 8px; color: #525252;">手机号</div>
+        <input class="mock-input" placeholder="请输入手机号" style="width: 100%; box-sizing: border-box;">
+        <div style="font-size: 13px; margin: 12px 0 8px; color: #525252;">是否已体检</div>
+        <div style="display: flex; gap: 12px;">
+          <label style="display: flex; align-items: center; gap: 4px; font-size: 14px; cursor: pointer;"><input type="radio" name="health" style="accent-color: #0052d9;"> 是</label>
+          <label style="display: flex; align-items: center; gap: 4px; font-size: 14px; cursor: pointer;"><input type="radio" name="health" style="accent-color: #0052d9;"> 否</label>
+        </div>
+        <div style="font-size: 13px; margin: 12px 0 8px; color: #525252;">进场有效期</div>
+        <input class="mock-input" type="date" style="width: 100%; box-sizing: border-box;">
+      </div>
+    </div>
+    <div class="mockup" style="max-width: 320px;">
+      <div class="mockup-header">第三步：安全确认</div>
+      <div class="mockup-body" style="padding: 12px;">
+        <div style="background: #fff3e0; border: 1px solid #ffb74d; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+          <div style="font-size: 14px; font-weight: 600; color: #e37318; margin-bottom: 6px;">⚠ 安全须知</div>
+          <div style="font-size: 12px; color: #666; line-height: 1.8;">
+            1. 进入施工现场必须佩戴安全帽<br>
+            2. 禁止穿拖鞋、短裤进入工地<br>
+            3. 未经许可不得操作机械设备<br>
+            4. 严禁酒后上岗作业<br>
+            5. 高处作业必须系挂安全带
+          </div>
+        </div>
+        <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #333; cursor: pointer;">
+          <input type="checkbox" style="margin-top: 2px; accent-color: #0052d9;"> 本人已阅读并承诺遵守以上安全规定，如有违反愿承担相应责任
+        </label>
+        <div style="margin-top: 20px; text-align: center;">
+          <button class="mock-button" style="width: 100%; background: #2ba471; color: #fff; padding: 12px; border: none; border-radius: 6px; font-size: 15px; cursor: pointer;">✓ 提交登记</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
