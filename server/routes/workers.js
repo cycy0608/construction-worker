@@ -1,21 +1,15 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { recognizeIdCard } = require('../ocr');
 
 const router = express.Router();
 
-// 文件上传配置
-const storage = multer.diskStorage({
-  destination: path.join(__dirname, '..', 'uploads'),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, uuidv4() + ext);
-  }
+// 文件上传配置（内存存储，兼容Vercel）
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
 });
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // 常量：安全须知内容
 const SAFETY_RULES = [
@@ -52,7 +46,7 @@ router.post('/ocr-id-card', upload.single('image'), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: '请上传身份证照片' });
     }
-    const result = await recognizeIdCard(req.file.path);
+    const result = await recognizeIdCard(req.file.buffer);
     res.json(result);
   } catch (err) {
     console.error('OCR识别失败:', err.message);
@@ -60,16 +54,19 @@ router.post('/ocr-id-card', upload.single('image'), async (req, res) => {
   }
 });
 
-// 上传人脸照片
+// 上传人脸照片（返回base64 data URL）
 router.post('/upload-face', upload.single('image'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: '请上传人脸照片' });
   }
-  res.json({ photo: '/uploads/' + req.file.filename });
+  const base64 = req.file.buffer.toString('base64');
+  const mime = req.file.mimetype || 'image/jpeg';
+  const dataUrl = `data:${mime};base64,${base64}`;
+  res.json({ photo: dataUrl });
 });
 
 // 提交人员登记
-router.post('/register', (req, res) => {
+router.post('/register', async (req, res) => {
   try {
     const { name, id_number, id_card_photo, face_photo, team, phone, health_check, safety_confirmed, valid_until, latitude, longitude, location_address } = req.body;
 
@@ -77,17 +74,22 @@ router.post('/register', (req, res) => {
       return res.status(400).json({ error: '请填写完整信息' });
     }
 
-    const id = uuidv4();
-    const stmt = db.prepare(`
-      INSERT INTO workers (id, name, id_number, id_card_photo, face_photo, team, phone, health_check, safety_confirmed, valid_until, latitude, longitude, location_address)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    const record = await db.createWorker({
+      name,
+      id_number,
+      id_card_photo: id_card_photo || null,
+      face_photo: face_photo || null,
+      team,
+      phone,
+      health_check: health_check ? 1 : 0,
+      safety_confirmed: safety_confirmed ? 1 : 0,
+      valid_until: valid_until || null,
+      latitude: latitude || null,
+      longitude: longitude || null,
+      location_address: location_address || null
+    });
 
-    stmt.run(id, name, id_number, id_card_photo || null, face_photo || null, team, phone,
-      health_check ? 1 : 0, safety_confirmed ? 1 : 0, valid_until || null,
-      latitude || null, longitude || null, location_address || null);
-
-    res.json({ success: true, id });
+    res.json({ success: true, id: record.id });
   } catch (err) {
     console.error('登记失败:', err.message);
     res.status(500).json({ error: '登记失败，请重试' });
@@ -95,32 +97,11 @@ router.post('/register', (req, res) => {
 });
 
 // 获取人员列表（支持搜索和筛选）
-router.get('/list', (req, res) => {
+router.get('/list', async (req, res) => {
   try {
     const { search, team, page = 1, pageSize = 20 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(pageSize);
-
-    let where = 'WHERE 1=1';
-    const params = [];
-
-    if (search) {
-      where += ' AND (name LIKE ? OR phone LIKE ? OR id_number LIKE ?)';
-      const like = `%${search}%`;
-      params.push(like, like, like);
-    }
-    if (team) {
-      where += ' AND team = ?';
-      params.push(team);
-    }
-
-    const countRow = db.prepare(`SELECT COUNT(*) as total FROM workers ${where}`).get(...params);
-    const total = countRow.total;
-
-    const rows = db.prepare(
-      `SELECT * FROM workers ${where} ORDER BY entry_time DESC LIMIT ? OFFSET ?`
-    ).all(...params, parseInt(pageSize), offset);
-
-    res.json({ total, page: parseInt(page), pageSize: parseInt(pageSize), list: rows });
+    const result = await db.listWorkers({ search, team, page, pageSize });
+    res.json(result);
   } catch (err) {
     console.error('查询失败:', err.message);
     res.status(500).json({ error: '查询失败' });
@@ -128,9 +109,9 @@ router.get('/list', (req, res) => {
 });
 
 // 获取人员详情
-router.get('/detail/:id', (req, res) => {
+router.get('/detail/:id', async (req, res) => {
   try {
-    const row = db.prepare('SELECT * FROM workers WHERE id = ?').get(req.params.id);
+    const row = await db.getWorker(req.params.id);
     if (!row) {
       return res.status(404).json({ error: '未找到该人员' });
     }
@@ -142,51 +123,10 @@ router.get('/detail/:id', (req, res) => {
 });
 
 // 统计概览
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
-
-    const todayCount = db.prepare(
-      "SELECT COUNT(*) as count FROM workers WHERE date(entry_time) = ?"
-    ).get(today);
-
-    const currentCount = db.prepare(
-      "SELECT COUNT(*) as count FROM workers WHERE valid_until >= date('now', 'localtime') OR valid_until IS NULL"
-    ).get();
-
-    const monthCount = db.prepare(
-      "SELECT COUNT(*) as count FROM workers WHERE strftime('%Y-%m', entry_time) = strftime('%Y-%m', 'now', 'localtime')"
-    ).get();
-
-    const noHealthCount = db.prepare(
-      "SELECT COUNT(*) as count FROM workers WHERE health_check = 0 AND (valid_until >= date('now', 'localtime') OR valid_until IS NULL)"
-    ).get();
-
-    // 近7天趋势
-    const trend = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().slice(0, 10);
-      const row = db.prepare(
-        "SELECT COUNT(*) as count FROM workers WHERE date(entry_time) = ?"
-      ).get(dateStr);
-      trend.push({ date: dateStr, count: row.count });
-    }
-
-    // 班组分布
-    const teamDist = db.prepare(
-      "SELECT team, COUNT(*) as count FROM workers WHERE valid_until >= date('now', 'localtime') OR valid_until IS NULL GROUP BY team ORDER BY count DESC"
-    ).all();
-
-    res.json({
-      todayCount: todayCount.count,
-      currentCount: currentCount.count,
-      monthCount: monthCount.count,
-      noHealthCount: noHealthCount.count,
-      trend,
-      teamDistribution: teamDist
-    });
+    const stats = await db.getStats();
+    res.json(stats);
   } catch (err) {
     console.error('统计失败:', err.message);
     res.status(500).json({ error: '统计失败' });
@@ -194,14 +134,12 @@ router.get('/stats', (req, res) => {
 });
 
 // 导出Excel（CSV格式）
-router.get('/export', (req, res) => {
+router.get('/export', async (req, res) => {
   try {
-    const rows = db.prepare(
-      "SELECT name, id_number, team, phone, entry_time, valid_until, health_check, safety_confirmed FROM workers ORDER BY entry_time DESC"
-    ).all();
+    const all = await db.getAllWorkers();
 
     const header = '姓名,身份证号,班组,手机号,进场时间,有效期至,是否体检,安全确认\n';
-    const csv = rows.map(r => [
+    const csv = all.map(r => [
       r.name,
       r.id_number,
       r.team,
@@ -214,7 +152,6 @@ router.get('/export', (req, res) => {
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=人员列表.csv');
-    // 添加BOM以支持Excel打开中文
     res.send('\uFEFF' + header + csv);
   } catch (err) {
     console.error('导出失败:', err.message);
