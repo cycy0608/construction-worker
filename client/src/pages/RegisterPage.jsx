@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Radio, DatePicker, Checkbox, MessagePlugin, Loading, Tag } from 'tdesign-react';
-import { ocrIdCard, uploadFace, submitRegister, getSafetyRules } from '../api';
+import { ocrIdCard, uploadFace, submitRegister, getSafetyRules, getWorkerList } from '../api';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -25,6 +25,7 @@ export default function RegisterPage() {
 
   // 提交成功信息
   const [submitTime, setSubmitTime] = useState('');
+  const [recentWorkers, setRecentWorkers] = useState([]);
 
   // 定位信息
   const [location, setLocation] = useState(null);
@@ -174,6 +175,11 @@ export default function RegisterPage() {
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', minute: '2-digit', second: '2-digit'
       }));
+      // 加载最近提交
+      try {
+        const res = await getWorkerList({ page: 1, pageSize: 10 });
+        setRecentWorkers(res.data.list || []);
+      } catch (e) { /* ignore */ }
       setStep(4);
     } catch (err) {
       MessagePlugin.error(err.response?.data?.error || '登记失败，请重试');
@@ -212,12 +218,20 @@ export default function RegisterPage() {
       {step === 1 && (
         <div className="register-body">
           <div className="section-title">第一步：上传身份证</div>
-          <div className="upload-area" onClick={() => idCardInputRef.current?.click()}>
-            <div className="upload-icon">📷</div>
-            <div className="upload-text">点击拍照或上传身份证正面</div>
-            <div className="upload-hint">系统自动识别姓名、身份证号</div>
-          </div>
-          <input ref={idCardInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleIdCardUpload} />
+          <label style={{ display: 'block', cursor: 'pointer' }}>
+            <div className="upload-area">
+              <div className="upload-icon">📷</div>
+              <div className="upload-text">点击拍照或上传身份证正面</div>
+              <div className="upload-hint">系统自动识别姓名、身份证号</div>
+            </div>
+            <input
+              ref={idCardInputRef}
+              type="file"
+              accept="image/*"
+              style={{ position: 'absolute', width: 0, height: 0, opacity: 0, overflow: 'hidden' }}
+              onChange={handleIdCardUpload}
+            />
+          </label>
 
           {idCardPreview && (
             <div style={{ marginTop: 12, textAlign: 'center' }}>
@@ -244,11 +258,19 @@ export default function RegisterPage() {
           {/* 人脸拍照 */}
           <div style={{ marginTop: 24 }}>
             <div className="section-title">人脸照片采集</div>
-            <div className="upload-area" onClick={() => faceInputRef.current?.click()}>
-              <div className="upload-icon">🤳</div>
-              <div className="upload-text">点击拍摄人脸照片</div>
-            </div>
-            <input ref={faceInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFaceUpload} />
+            <label style={{ display: 'block', cursor: 'pointer' }}>
+              <div className="upload-area">
+                <div className="upload-icon">🤳</div>
+                <div className="upload-text">点击拍摄人脸照片</div>
+              </div>
+              <input
+                ref={faceInputRef}
+                type="file"
+                accept="image/*"
+                style={{ position: 'absolute', width: 0, height: 0, opacity: 0, overflow: 'hidden' }}
+                onChange={handleFaceUpload}
+              />
+            </label>
             {facePreview && (
               <div style={{ marginTop: 12, textAlign: 'center' }}>
                 <img src={facePreview} alt="人脸照片" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #f0f0f0' }} />
@@ -376,6 +398,32 @@ export default function RegisterPage() {
             <div style={{ fontSize: 13, color: '#999', marginBottom: 8 }}>提交时间</div>
             <div style={{ fontSize: 18, fontWeight: 600, color: '#333' }}>{submitTime}</div>
           </div>
+
+          {/* 最近提交记录 */}
+          {recentWorkers.length > 0 && (
+            <div style={{ textAlign: 'left', marginBottom: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 12 }}>
+                最近提交记录
+              </div>
+              {recentWorkers.slice(0, 5).map((w, i) => (
+                <div key={w.id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '10px 0', borderBottom: i < Math.min(recentWorkers.length - 1, 4) ? '1px solid #f0f0f0' : 'none',
+                  fontSize: 13
+                }}>
+                  <div>
+                    <span style={{ fontWeight: 500 }}>{w.name}</span>
+                    <span style={{ color: '#999', marginLeft: 8 }}>{w.team}</span>
+                  </div>
+                  <span style={{ color: '#999' }}>
+                    {w.entry_time ? new Date(w.entry_time).toLocaleString('zh-CN', {
+                      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                    }) : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <Button theme="primary" size="large" block onClick={handleNewRegister}
             style={{ background: '#0052d9', borderColor: '#0052d9' }}>
