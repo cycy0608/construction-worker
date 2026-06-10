@@ -23,6 +23,9 @@ export default function RegisterPage() {
   const [safetyConfirmed, setSafetyConfirmed] = useState(false);
   const [safetyRules, setSafetyRules] = useState([]);
 
+  // 提交成功信息
+  const [submitTime, setSubmitTime] = useState('');
+
   // 定位信息
   const [location, setLocation] = useState(null);
   const [locating, setLocating] = useState(false);
@@ -166,12 +169,12 @@ export default function RegisterPage() {
         location_address: location ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}` : null
       });
       MessagePlugin.success('登记成功！');
-      // 重置表单
-      setStep(1);
-      setName(''); setIdNumber(''); setTeam(''); setPhone('');
-      setHealthCheck(null); setValidUntil(''); setSafetyConfirmed(false);
-      setOcrResult(null); setIdCardPreview(''); setFacePreview('');
-      setIdCardPhoto(''); setFacePhoto('');
+      const now = new Date();
+      setSubmitTime(now.toLocaleString('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      }));
+      setStep(4);
     } catch (err) {
       MessagePlugin.error(err.response?.data?.error || '登记失败，请重试');
     } finally {
@@ -180,6 +183,16 @@ export default function RegisterPage() {
   };
 
   const steps = ['身份认证', '填写信息', '安全确认'];
+
+  // 重置表单，登记新人员
+  const handleNewRegister = () => {
+    setStep(1);
+    setName(''); setIdNumber(''); setTeam(''); setPhone('');
+    setHealthCheck(null); setValidUntil(''); setSafetyConfirmed(false);
+    setOcrResult(null); setIdCardPreview(''); setFacePreview('');
+    setIdCardPhoto(''); setFacePhoto('');
+    setSubmitTime('');
+  };
 
   return (
     <div className="register-container">
@@ -204,7 +217,7 @@ export default function RegisterPage() {
             <div className="upload-text">点击拍照或上传身份证正面</div>
             <div className="upload-hint">系统自动识别姓名、身份证号</div>
           </div>
-          <input ref={idCardInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleIdCardUpload} />
+          <input ref={idCardInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleIdCardUpload} />
 
           {idCardPreview && (
             <div style={{ marginTop: 12, textAlign: 'center' }}>
@@ -235,7 +248,7 @@ export default function RegisterPage() {
               <div className="upload-icon">🤳</div>
               <div className="upload-text">点击拍摄人脸照片</div>
             </div>
-            <input ref={faceInputRef} type="file" accept="image/*" capture="user" style={{ display: 'none' }} onChange={handleFaceUpload} />
+            <input ref={faceInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFaceUpload} />
             {facePreview && (
               <div style={{ marginTop: 12, textAlign: 'center' }}>
                 <img src={facePreview} alt="人脸照片" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #f0f0f0' }} />
@@ -335,6 +348,39 @@ export default function RegisterPage() {
               提交登记
             </Button>
           </div>
+        </div>
+      )}
+
+      {/* 步骤4：登记成功 */}
+      {step === 4 && (
+        <div className="register-body" style={{ textAlign: 'center' }}>
+          <div style={{ marginTop: 40, marginBottom: 24 }}>
+            <div style={{
+              width: 80, height: 80, borderRadius: '50%', background: '#2ba471',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto', fontSize: 40, color: '#fff', fontWeight: 'bold'
+            }}>✓</div>
+          </div>
+
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#2ba471', marginBottom: 8 }}>
+            登记成功
+          </div>
+          <div style={{ fontSize: 14, color: '#666', marginBottom: 24 }}>
+            您已成功完成进场登记
+          </div>
+
+          <div style={{
+            background: '#f6ffed', borderRadius: 8, padding: 20, marginBottom: 32,
+            border: '1px solid #b7eb8f'
+          }}>
+            <div style={{ fontSize: 13, color: '#999', marginBottom: 8 }}>提交时间</div>
+            <div style={{ fontSize: 18, fontWeight: 600, color: '#333' }}>{submitTime}</div>
+          </div>
+
+          <Button theme="primary" size="large" block onClick={handleNewRegister}
+            style={{ background: '#0052d9', borderColor: '#0052d9' }}>
+            登记新人员
+          </Button>
         </div>
       )}
     </div>
