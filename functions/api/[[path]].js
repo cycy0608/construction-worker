@@ -266,6 +266,17 @@ export async function onRequest(context) {
       else { result = json(worker); }
     }
 
+    // POST /api/admin/verify
+    else if (path === '/api/admin/verify' && method === 'POST') {
+      const body = await request.json();
+      const adminPassword = env.ADMIN_PASSWORD || 'admin123';
+      if (body.password === adminPassword) {
+        result = json({ success: true, token: 'admin_' + Date.now() });
+      } else {
+        result = json({ error: '密码错误' }, 401);
+      }
+    }
+
     // 404
     else {
       result = json({ error: 'Not Found' }, 404);

@@ -44,6 +44,11 @@ export function getStats() {
   return api.get('/stats');
 }
 
+// 验证管理员密码
+export function verifyPassword(password) {
+  return axios.post('/api/admin/verify', { password });
+}
+
 // 导出链接
 export function getExportUrl() {
   return '/api/workers/export';

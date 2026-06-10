@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, Select, Table, Dialog, Tag, MessagePlugin } from 'tdesign-react';
+import { Button, Input, Select, Table, Dialog, Tag, MessagePlugin, Image } from 'tdesign-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getWorkerList, getStats, getExportUrl } from '../api';
 
@@ -18,6 +18,15 @@ export default function AdminPage() {
   // 详情弹窗
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailData, setDetailData] = useState(null);
+
+  // 图片放大弹窗
+  const [photoDialogVisible, setPhotoDialogVisible] = useState(false);
+  const [currentPhoto, setCurrentPhoto] = useState({ url: '', title: '' });
+
+  const openPhotoDialog = (url, title) => {
+    setCurrentPhoto({ url, title });
+    setPhotoDialogVisible(true);
+  };
 
   // 加载统计数据
   const loadStats = async () => {
@@ -99,16 +108,22 @@ export default function AdminPage() {
     window.open(getExportUrl(), '_blank');
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_login_time');
+    navigate('/login', { replace: true });
+  };
+
   return (
     <div className="page-container">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>工地临时人员管理系统</h1>
         <div style={{ display: 'flex', gap: 8 }}>
           <Button theme="default" size="small" onClick={() => navigate('/qrcode')}>
-            查看二维码
+            二维码
           </Button>
-          <Button theme="default" size="small" onClick={() => navigate('/register')}>
-            模拟登记
+          <Button theme="danger" size="small" variant="outline" onClick={handleLogout}>
+            退出
           </Button>
         </div>
       </div>
@@ -283,7 +298,7 @@ export default function AdminPage() {
               <div className="photo-block">
                 <div className="photo-label">身份证照片</div>
                 {detailData.id_card_photo ? (
-                  <img src={detailData.id_card_photo} alt="身份证" />
+                  <img src={detailData.id_card_photo} alt="身份证" style={{ cursor: 'pointer' }} onClick={() => openPhotoDialog(detailData.id_card_photo, '身份证照片')} />
                 ) : (
                   <div className="upload-area" style={{ padding: 20, color: '#999', fontSize: 13 }}>未上传</div>
                 )}
@@ -291,7 +306,7 @@ export default function AdminPage() {
               <div className="photo-block">
                 <div className="photo-label">人脸照片</div>
                 {detailData.face_photo ? (
-                  <img src={detailData.face_photo} alt="人脸照片" />
+                  <img src={detailData.face_photo} alt="人脸照片" style={{ cursor: 'pointer' }} onClick={() => openPhotoDialog(detailData.face_photo, '人脸照片')} />
                 ) : (
                   <div className="upload-area" style={{ padding: 20, color: '#999', fontSize: 13 }}>未上传</div>
                 )}
@@ -299,6 +314,23 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+      </Dialog>
+
+      {/* 图片放大弹窗 */}
+      <Dialog
+        header={currentPhoto.title}
+        visible={photoDialogVisible}
+        onClose={() => setPhotoDialogVisible(false)}
+        width={800}
+        footer={null}
+      >
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+          <img
+            src={currentPhoto.url}
+            alt={currentPhoto.title}
+            style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }}
+          />
+        </div>
       </Dialog>
     </div>
   );
