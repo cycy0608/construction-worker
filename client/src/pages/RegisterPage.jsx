@@ -50,6 +50,16 @@ export default function RegisterPage() {
     });
   });
 
+  // 文件转 base64（本地处理，不走服务器）
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   // 处理身份证上传
   const handleIdCardUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -57,7 +67,12 @@ export default function RegisterPage() {
 
     const preview = URL.createObjectURL(file);
     setIdCardPreview(preview);
-    setIdCardPhoto('');
+
+    // 本地转 base64 存照片（服务器不处理大图）
+    try {
+      const base64 = await fileToBase64(file);
+      setIdCardPhoto(base64);
+    } catch (err) { /* 忽略，照片可选 */ }
 
     setLoading(true);
     try {
@@ -74,7 +89,7 @@ export default function RegisterPage() {
     }
   };
 
-  // 处理人脸拍照
+  // 处理人脸拍照（本地转 base64，不再上传服务器）
   const handleFaceUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -82,15 +97,12 @@ export default function RegisterPage() {
     const preview = URL.createObjectURL(file);
     setFacePreview(preview);
 
-    setLoading(true);
     try {
-      const res = await uploadFace(file);
-      setFacePhoto(res.data.photo);
-      MessagePlugin.success('人脸照片上传成功');
+      const base64 = await fileToBase64(file);
+      setFacePhoto(base64);
+      MessagePlugin.success('人脸照片已就绪');
     } catch (err) {
-      MessagePlugin.error('人脸照片上传失败');
-    } finally {
-      setLoading(false);
+      MessagePlugin.error('照片处理失败');
     }
   };
 

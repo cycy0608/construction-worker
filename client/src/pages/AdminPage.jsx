@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, Select, Table, Dialog, Tag, MessagePlugin, Image } from 'tdesign-react';
+import { Button, Input, Select, Table, Dialog, Tag, MessagePlugin, Loading } from 'tdesign-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { getWorkerList, getStats, getExportUrl } from '../api';
+import { getWorkerList, getStats, getWorkerDetail, getExportUrl } from '../api';
 
 export default function AdminPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
-  const [workerList, setWorkerList] = useState([]);
+  const [list, setList] = useState([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState('');
+  const [searchText, setSearchText] = useState('');
   const [teamFilter, setTeamFilter] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
@@ -18,6 +17,7 @@ export default function AdminPage() {
   // 详情弹窗
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailData, setDetailData] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   // 图片放大弹窗
   const [photoDialogVisible, setPhotoDialogVisible] = useState(false);
@@ -99,9 +99,25 @@ export default function AdminPage() {
     )}
   ];
 
-  const showDetail = (row) => {
-    setDetailData(row);
+  const showDetail = async (row) => {
+    // 如果列表数据已有照片标记，从接口拉完整数据
+    if (row.has_idcard_photo || row.has_face_photo || row.id_card_photo || row.face_photo) {
+      // 已有内嵌照片直接用
+      setDetailData(row);
+      setDetailVisible(true);
+      return;
+    }
+    // 否则调接口取完整详情（含照片）
+    setDetailLoading(true);
     setDetailVisible(true);
+    try {
+      const res = await getWorkerDetail(row.id);
+      setDetailData(res.data);
+    } catch {
+      setDetailData(row);
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   const handleExport = () => {
@@ -235,10 +251,11 @@ export default function AdminPage() {
         header="人员详情"
         visible={detailVisible}
         onClose={() => setDetailVisible(false)}
-        width={560}
-        footer={null}
+        width={600}
       >
-        {detailData && (
+        {detailLoading ? (
+          <div style={{ textAlign: 'center', padding: 40 }}><Loading size="large" /></div>
+        ) : detailData && (
           <div>
             <div className="detail-grid">
               <div className="detail-item">
@@ -263,15 +280,13 @@ export default function AdminPage() {
               </div>
               <div className="detail-item">
                 <div className="detail-label">有效期至</div>
-                <div className="detail-value">{detailData.valid_until || '未设置'}</div>
+                <div className="detail-value">{detailData.valid_until || '永久'}</div>
               </div>
               <div className="detail-item">
                 <div className="detail-label">定位坐标</div>
                 <div className="detail-value">
                   {detailData.latitude && detailData.longitude
-                    ? <a href={`https://map.baidu.com/search/${detailData.latitude},${detailData.longitude}`} target="_blank" rel="noreferrer" style={{ color: '#0052d9' }}>
-                        {detailData.latitude.toFixed(6)}, {detailData.longitude.toFixed(6)}
-                      </a>
+                    ? `${detailData.latitude.toFixed(6)}, ${detailData.longitude.toFixed(6)}`
                     : '未获取'}
                 </div>
               </div>
@@ -298,7 +313,7 @@ export default function AdminPage() {
               <div className="photo-block">
                 <div className="photo-label">身份证照片</div>
                 {detailData.id_card_photo ? (
-                  <img src={detailData.id_card_photo} alt="身份证" style={{ cursor: 'pointer' }} onClick={() => openPhotoDialog(detailData.id_card_photo, '身份证照片')} />
+                  <img src={detailData.id_card_photo} alt="身份证" style={{ cursor: 'pointer', maxWidth: '100%' }} onClick={() => openPhotoDialog(detailData.id_card_photo, '身份证照片')} />
                 ) : (
                   <div className="upload-area" style={{ padding: 20, color: '#999', fontSize: 13 }}>未上传</div>
                 )}
@@ -306,7 +321,7 @@ export default function AdminPage() {
               <div className="photo-block">
                 <div className="photo-label">人脸照片</div>
                 {detailData.face_photo ? (
-                  <img src={detailData.face_photo} alt="人脸照片" style={{ cursor: 'pointer' }} onClick={() => openPhotoDialog(detailData.face_photo, '人脸照片')} />
+                  <img src={detailData.face_photo} alt="人脸照片" style={{ cursor: 'pointer', maxWidth: '100%' }} onClick={() => openPhotoDialog(detailData.face_photo, '人脸照片')} />
                 ) : (
                   <div className="upload-area" style={{ padding: 20, color: '#999', fontSize: 13 }}>未上传</div>
                 )}
