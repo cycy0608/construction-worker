@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Input, Select, Table, Dialog, Tag, MessagePlugin } from 'tdesign-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getWorkerList, getStats, getWorkerDetail, getExportUrl } from '../api';
+import axios from 'axios';
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -13,6 +14,30 @@ export default function AdminPage() {
   const [teamFilter, setTeamFilter] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
+
+  // 密码验证
+  const [authorized, setAuthorized] = useState(() => !!localStorage.getItem('admin_token'));
+  const [pwdInput, setPwdInput] = useState('');
+  const [pwdLoading, setPwdLoading] = useState(false);
+  const [pwdError, setPwdError] = useState('');
+
+  const handleLogin = async () => {
+    if (!pwdInput) return;
+    setPwdLoading(true);
+    setPwdError('');
+    try {
+      const res = await axios.post('/api/admin/verify', { password: pwdInput });
+      if (res.data.success) {
+        localStorage.setItem('admin_token', res.data.token);
+        localStorage.setItem('admin_login_time', String(Date.now()));
+        setAuthorized(true);
+      }
+    } catch (err) {
+      setPwdError(err.response?.data?.error || '密码错误');
+    } finally {
+      setPwdLoading(false);
+    }
+  };
 
   // 详情弹窗
   const [detailVisible, setDetailVisible] = useState(false);
@@ -127,9 +152,54 @@ export default function AdminPage() {
   const handleLogout = () => {
     localStorage.removeItem('admin_token');
     localStorage.removeItem('admin_login_time');
-    navigate('/login', { replace: true });
+    setAuthorized(false);
+    setPwdInput('');
   };
 
+  // 未登录：显示密码输入
+  if (!authorized) {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#f5f5f5', padding: 20
+      }}>
+        <div style={{
+          background: '#fff', borderRadius: 12, padding: '40px 32px',
+          width: '100%', maxWidth: 360, boxShadow: '0 2px 12px rgba(0,0,0,0.08)'
+        }}>
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🔐</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#333' }}>管理后台登录</div>
+            <div style={{ fontSize: 13, color: '#999', marginTop: 4 }}>请输入管理员密码</div>
+          </div>
+          <Input
+            type="password"
+            placeholder="管理员密码"
+            value={pwdInput}
+            onChange={(v) => { setPwdInput(v); setPwdError(''); }}
+            onEnter={handleLogin}
+            size="large"
+            style={{ marginBottom: pwdError ? 8 : 16 }}
+          />
+          {pwdError && (
+            <div style={{ color: '#e34d59', fontSize: 13, marginBottom: 16 }}>{pwdError}</div>
+          )}
+          <Button
+            theme="primary"
+            block
+            size="large"
+            loading={pwdLoading}
+            onClick={handleLogin}
+            disabled={!pwdInput}
+          >
+            登录
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // 已登录：显示管理后台
   return (
     <div className="page-container">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
