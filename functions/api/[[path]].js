@@ -3,47 +3,80 @@
  * 处理所有 /api/* 请求
  */
 
-// 回退到普通变量
-let _env = null;
-
-// ====== 内存存储（没绑定KV时使用） ======
-const memoryStore = new Map();
-
+// ====== KV 存储操作 ======
 function getKV(env) {
   if (env && env.KV) return env.KV;
-  // 回退到内存存储
+  // 回退到内存存储（无 KV 绑定时）
+  const store = new Map();
   return {
-    async get(key) { return memoryStore.get(key) || null; },
-    async put(key, value) { memoryStore.set(key, value); },
-    async delete(key) { memoryStore.delete(key); },
+    async get(key) { return store.get(key) || null; },
+    async put(key, value) { store.set(key, value); },
+    async delete(key) { store.delete(key); },
     async list(opts) {
-      const prefix = (opts && opts.prefix) || '';
-      const keys = [];
-      for (const k of memoryStore.keys()) {
-        if (k.startsWith(prefix)) keys.push({ name: k });
-      }
-      return { keys };
+      const prefix = opts?.prefix || '';
+      return { keys: [...store.keys()].filter(k => k.startsWith(prefix)).map(k => ({ name: k })) };
     }
   };
 }
 
+// ====== 高效的 ArrayBuffer → Base64 ======
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+// ====== 密码管理（存 KV，初始默认 admin123） ======
+const PASSWORD_KEY = 'admin:password';
+const DEFAULT_PASSWORD = 'admin123';
+
+async function getPassword(kv) {
+  const pwd = await kv.get(PASSWORD_KEY);
+  return pwd || DEFAULT_PASSWORD;
+}
+
+async function initPassword(kv) {
+  const existing = await kv.get(PASSWORD_KEY);
+  if (!existing) {
+    await kv.put(PASSWORD_KEY, DEFAULT_PASSWORD);
+  }
+}
+
 // ====== 数据库操作 ======
 const WORKER_PREFIX = 'worker:';
+const PHOTO_IDCARD_PREFIX = 'photo:idcard:';
+const PHOTO_FACE_PREFIX = 'photo:face:';
 const IDS_KEY = 'workers:ids';
 const COUNTER_KEY = 'workers:counter';
 
+// 创建人员（照片和元数据分开存储）
 async function createWorker(kv, data) {
   const counterStr = await kv.get(COUNTER_KEY);
   const counter = (parseInt(counterStr) || 0) + 1;
   await kv.put(COUNTER_KEY, String(counter));
   const workerId = String(counter);
+
+  // 提取照片
+  const idCardPhoto = data.id_card_photo || null;
+  const facePhoto = data.face_photo || null;
+
+  // 存照片（单独 key）
+  if (idCardPhoto) {
+    await kv.put(PHOTO_IDCARD_PREFIX + workerId, idCardPhoto);
+  }
+  if (facePhoto) {
+    await kv.put(PHOTO_FACE_PREFIX + workerId, facePhoto);
+  }
+
   const now = new Date().toISOString();
+  // 元数据（不含大图），只标记是否有照片
   const record = {
     id: workerId,
     name: data.name,
     id_number: data.id_number,
-    id_card_photo: data.id_card_photo || null,
-    face_photo: data.face_photo || null,
     team: data.team,
     phone: data.phone,
     health_check: data.health_check ? 1 : 0,
@@ -53,28 +86,63 @@ async function createWorker(kv, data) {
     longitude: data.longitude || null,
     location_address: data.location_address || null,
     entry_time: data.entry_time || now,
-    created_at: data.created_at || now
+    created_at: data.created_at || now,
+    has_idcard_photo: !!idCardPhoto,
+    has_face_photo: !!facePhoto
   };
   await kv.put(WORKER_PREFIX + workerId, JSON.stringify(record));
+
+  // 更新 ID 列表
   let idsStr = await kv.get(IDS_KEY);
   let ids = idsStr ? JSON.parse(idsStr) : [];
   ids.unshift(workerId);
   await kv.put(IDS_KEY, JSON.stringify(ids));
+
   return record;
 }
 
+// 获取人员元数据（不含照片）
 async function getWorker(kv, id) {
   const raw = await kv.get(WORKER_PREFIX + id);
   return raw ? JSON.parse(raw) : null;
 }
 
+// 获取人员完整信息（含照片）
+async function getWorkerDetail(kv, id) {
+  const raw = await kv.get(WORKER_PREFIX + id);
+  if (!raw) return null;
+  const record = JSON.parse(raw);
+
+  // 从新位置加载照片
+  let idCardPhoto = await kv.get(PHOTO_IDCARD_PREFIX + id);
+  let facePhoto = await kv.get(PHOTO_FACE_PREFIX + id);
+
+  // 向后兼容：旧数据中照片嵌入在记录里
+  if (!idCardPhoto && record.id_card_photo) idCardPhoto = record.id_card_photo;
+  if (!facePhoto && record.face_photo) facePhoto = record.face_photo;
+
+  return {
+    ...record,
+    id_card_photo: idCardPhoto || null,
+    face_photo: facePhoto || null
+  };
+}
+
+// 获取所有人员（剥离照片字段，列表轻量）
 async function getAllWorkers(kv) {
-  let idsStr = await kv.get(IDS_KEY);
-  let ids = idsStr ? JSON.parse(idsStr) : [];
+  const idsStr = await kv.get(IDS_KEY);
+  const ids = idsStr ? JSON.parse(idsStr) : [];
   const all = [];
-  for (const id of ids) {
-    const worker = await getWorker(kv, id);
-    if (worker) all.push(worker);
+  const limit = Math.min(ids.length, 500);
+  for (let i = 0; i < limit; i++) {
+    const raw = await kv.get(WORKER_PREFIX + ids[i]);
+    if (raw) {
+      const record = JSON.parse(raw);
+      // 剥离旧数据的照片字段，列表不需要
+      delete record.id_card_photo;
+      delete record.face_photo;
+      all.push(record);
+    }
   }
   return all;
 }
@@ -93,9 +161,7 @@ async function getBaiduToken(env) {
 
 async function recognizeIdCard(imageBuffer, env) {
   const token = await getBaiduToken(env);
-  const u8 = new Uint8Array(imageBuffer);
-  const binary = Array.from(u8, b => String.fromCharCode(b)).join('');
-  const imageBase64 = btoa(binary);
+  const imageBase64 = arrayBufferToBase64(imageBuffer);
   const body = new URLSearchParams({
     id_card_side: 'front',
     image: imageBase64,
@@ -132,11 +198,13 @@ const SAFETY_RULES = [
 // ====== 主路由处理 ======
 export async function onRequest(context) {
   const { request, env } = context;
-  _env = env;
   const kv = getKV(env);
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
+
+  // 初始化密码
+  await initPassword(kv);
 
   try {
     let result;
@@ -165,16 +233,19 @@ export async function onRequest(context) {
 
     // POST /api/workers/upload-face
     else if (path === '/api/workers/upload-face' && method === 'POST') {
-      const form = await request.formData();
-      const file = form.get('image');
-      if (!file) { result = json({ error: '请上传人脸照片' }, 400); }
-      else {
-        const buffer = await file.arrayBuffer();
-        const u8 = new Uint8Array(buffer);
-        const binary = Array.from(u8, b => String.fromCharCode(b)).join('');
-        const base64 = btoa(binary);
-        const mime = file.type || 'image/jpeg';
-        result = json({ photo: `data:${mime};base64,${base64}` });
+      try {
+        const form = await request.formData();
+        const file = form.get('image');
+        if (!file) {
+          result = json({ error: '请上传人脸照片' }, 400);
+        } else {
+          const buffer = await file.arrayBuffer();
+          const base64 = arrayBufferToBase64(buffer);
+          const mime = file.type || 'image/jpeg';
+          result = json({ photo: `data:${mime};base64,${base64}` });
+        }
+      } catch (err) {
+        result = json({ error: '照片处理失败: ' + (err.message || '未知错误') }, 500);
       }
     }
 
@@ -182,10 +253,14 @@ export async function onRequest(context) {
     else if (path === '/api/workers/register' && method === 'POST') {
       const data = await request.json();
       if (!data.name || !data.id_number || !data.team || !data.phone) {
-        result = json({ error: '请填写完整信息' }, 400);
+        result = json({ error: '请填写完整信息（姓名、身份证号、班组、手机号）' }, 400);
       } else {
-        const record = await createWorker(kv, data);
-        result = json({ success: true, id: record.id });
+        try {
+          const record = await createWorker(kv, data);
+          result = json({ success: true, id: record.id });
+        } catch (err) {
+          result = json({ error: '保存失败: ' + (err.message || '未知错误') }, 500);
+        }
       }
     }
 
@@ -258,10 +333,10 @@ export async function onRequest(context) {
       });
     }
 
-    // GET /api/workers/detail/:id
+    // GET /api/workers/detail/:id (含照片)
     else if (path.startsWith('/api/workers/detail/') && method === 'GET') {
       const id = path.split('/').pop();
-      const worker = await getWorker(kv, id);
+      const worker = await getWorkerDetail(kv, id);
       if (!worker) { result = json({ error: '未找到该人员' }, 404); }
       else { result = json(worker); }
     }
@@ -269,11 +344,35 @@ export async function onRequest(context) {
     // POST /api/admin/verify
     else if (path === '/api/admin/verify' && method === 'POST') {
       const body = await request.json();
-      const adminPassword = env.ADMIN_PASSWORD || 'admin123';
-      if (body.password === adminPassword) {
+      const adminPassword = await getPassword(kv);
+      if (env.ADMIN_PASSWORD) {
+        // 环境变量优先
+        const envPwd = env.ADMIN_PASSWORD;
+        if (body.password === envPwd) {
+          result = json({ success: true, token: 'admin_' + Date.now() });
+        } else {
+          result = json({ error: '密码错误' }, 401);
+        }
+      } else if (body.password === adminPassword) {
         result = json({ success: true, token: 'admin_' + Date.now() });
       } else {
         result = json({ error: '密码错误' }, 401);
+      }
+    }
+
+    // POST /api/admin/change-password
+    else if (path === '/api/admin/change-password' && method === 'POST') {
+      const body = await request.json();
+      if (!body.oldPassword || !body.newPassword) {
+        result = json({ error: '请填写旧密码和新密码' }, 400);
+      } else {
+        const currentPwd = await getPassword(kv);
+        if (body.oldPassword !== currentPwd) {
+          result = json({ error: '旧密码错误' }, 401);
+        } else {
+          await kv.put(PASSWORD_KEY, body.newPassword);
+          result = json({ success: true });
+        }
       }
     }
 
