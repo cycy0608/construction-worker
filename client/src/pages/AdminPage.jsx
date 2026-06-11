@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, Select, Table, Dialog, Tag, MessagePlugin, Loading } from 'tdesign-react';
+import { Button, Input, Select, Table, Dialog, Tag, MessagePlugin } from 'tdesign-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getWorkerList, getStats, getWorkerDetail, getExportUrl } from '../api';
 
@@ -254,7 +254,7 @@ export default function AdminPage() {
         width={600}
       >
         {detailLoading ? (
-          <div style={{ textAlign: 'center', padding: 40 }}><Loading size="large" /></div>
+          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>加载中...</div>
         ) : detailData && (
           <div>
             <div className="detail-grid">
