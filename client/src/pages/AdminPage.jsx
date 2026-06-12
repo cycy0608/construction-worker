@@ -126,14 +126,13 @@ export default function AdminPage() {
   ];
 
   const showDetail = async (row) => {
-    // 如果列表数据已有照片标记，从接口拉完整数据
-    if (row.has_idcard_photo || row.has_face_photo || row.id_card_photo || row.face_photo) {
-      // 已有内嵌照片直接用
+    // 仅有内嵌照片的旧数据才直接用，否则调接口取详情（含KV分离存储的照片）
+    if (row.id_card_photo || row.face_photo) {
       setDetailData(row);
       setDetailVisible(true);
       return;
     }
-    // 否则调接口取完整详情（含照片）
+    // 调接口获取完整详情（照片从KV单独加载）
     setDetailLoading(true);
     setDetailVisible(true);
     try {
