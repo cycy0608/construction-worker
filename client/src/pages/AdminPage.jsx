@@ -8,12 +8,13 @@ import axios from 'axios';
 export default function AdminPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
-  const [list, setList] = useState([]);
+  const [workerList, setWorkerList] = useState([]);
   const [total, setTotal] = useState(0);
-  const [searchText, setSearchText] = useState('');
+  const [search, setSearch] = useState('');
   const [teamFilter, setTeamFilter] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
+  const [loading, setLoading] = useState(false);
 
   // 密码验证
   const [authorized, setAuthorized] = useState(() => !!localStorage.getItem('admin_token'));
