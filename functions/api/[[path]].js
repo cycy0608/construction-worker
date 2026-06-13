@@ -19,14 +19,38 @@ function getKV(env) {
   };
 }
 
+// ====== 北京时间工具 ======
+function beijingISO() {
+  const now = new Date();
+  now.setHours(now.getHours() + 8);
+  return now.toISOString().replace('Z', '+08:00');
+}
+function beijingToday() {
+  const now = new Date();
+  now.setHours(now.getHours() + 8);
+  return now.toISOString().slice(0, 10);
+}
+function beijingMonth() {
+  const now = new Date();
+  now.setHours(now.getHours() + 8);
+  return now.toISOString().slice(0, 7);
+}
+function beijingDateDaysAgo(days) {
+  const d = new Date();
+  d.setHours(d.getHours() + 8);
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
 // ====== 高效的 ArrayBuffer → Base64 ======
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const chunks = [];
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
   }
-  return btoa(binary);
+  return btoa(chunks.join(''));
 }
 
 // ====== 密码管理（存 KV，初始默认 admin123） ======
@@ -71,7 +95,7 @@ async function createWorker(kv, data) {
     await kv.put(PHOTO_FACE_PREFIX + workerId, facePhoto);
   }
 
-  const now = new Date().toISOString();
+  const now = beijingISO();
   // 元数据（不含大图），只标记是否有照片
   const record = {
     id: workerId,
@@ -107,24 +131,17 @@ async function getWorker(kv, id) {
   return raw ? JSON.parse(raw) : null;
 }
 
-// 获取人员完整信息（含照片）
+// 获取人员完整信息（照片以URL返回，不读KV大图）
 async function getWorkerDetail(kv, id) {
   const raw = await kv.get(WORKER_PREFIX + id);
   if (!raw) return null;
   const record = JSON.parse(raw);
 
-  // 从新位置加载照片
-  let idCardPhoto = await kv.get(PHOTO_IDCARD_PREFIX + id);
-  let facePhoto = await kv.get(PHOTO_FACE_PREFIX + id);
-
-  // 向后兼容：旧数据中照片嵌入在记录里
-  if (!idCardPhoto && record.id_card_photo) idCardPhoto = record.id_card_photo;
-  if (!facePhoto && record.face_photo) facePhoto = record.face_photo;
-
+  // 照片改为返回独立端点URL，由浏览器异步加载（避免KV大图读取超时）
   return {
     ...record,
-    id_card_photo: idCardPhoto || null,
-    face_photo: facePhoto || null
+    id_card_photo: record.has_idcard_photo ? `/api/workers/photo/idcard/${id}` : null,
+    face_photo: record.has_face_photo ? `/api/workers/photo/face/${id}` : null
   };
 }
 
@@ -292,26 +309,23 @@ export async function onRequest(context) {
     // GET /api/workers/stats
     else if (path === '/api/workers/stats' && method === 'GET') {
       const all = await getAllWorkers(kv);
-      const now = new Date();
-      const todayStr = now.toISOString().slice(0, 10);
-      const monthStr = now.toISOString().slice(0, 7);
+      const bjToday = beijingToday();
+      const bjMonth = beijingMonth();
 
-      const todayCount = all.filter(w => w.entry_time && w.entry_time.startsWith(todayStr)).length;
-      const currentCount = all.filter(w => !w.valid_until || new Date(w.valid_until) >= new Date(todayStr)).length;
-      const monthCount = all.filter(w => w.entry_time && w.entry_time.startsWith(monthStr)).length;
-      const noHealthCount = all.filter(w => !w.health_check && (!w.valid_until || new Date(w.valid_until) >= new Date(todayStr))).length;
+      const todayCount = all.filter(w => w.entry_time && w.entry_time.startsWith(bjToday)).length;
+      const currentCount = all.filter(w => !w.valid_until || new Date(w.valid_until) >= new Date(bjToday)).length;
+      const monthCount = all.filter(w => w.entry_time && w.entry_time.startsWith(bjMonth)).length;
+      const noHealthCount = all.filter(w => !w.health_check && (!w.valid_until || new Date(w.valid_until) >= new Date(bjToday))).length;
 
       const trend = [];
       for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const ds = d.toISOString().slice(0, 10);
+        const ds = beijingDateDaysAgo(i);
         trend.push({ date: ds, count: all.filter(w => w.entry_time && w.entry_time.startsWith(ds)).length });
       }
 
       const teamMap = {};
       all.forEach(w => {
-        if ((!w.valid_until || new Date(w.valid_until) >= new Date(todayStr)) && w.team) {
+        if ((!w.valid_until || new Date(w.valid_until) >= new Date(bjToday)) && w.team) {
           teamMap[w.team] = (teamMap[w.team] || 0) + 1;
         }
       });
@@ -333,7 +347,33 @@ export async function onRequest(context) {
       });
     }
 
-    // GET /api/workers/detail/:id (含照片)
+    // GET /api/workers/photo/:type/:id — 独立照片端点（浏览器异步加载，避免大图JSON超时）
+    else if (path.startsWith('/api/workers/photo/') && method === 'GET') {
+      const parts = path.split('/');
+      const photoType = parts[parts.length - 2]; // 'idcard' or 'face'
+      const id = parts[parts.length - 1];
+      const prefix = photoType === 'idcard' ? PHOTO_IDCARD_PREFIX : PHOTO_FACE_PREFIX;
+      const photoData = await kv.get(prefix + id);
+
+      if (photoData) {
+        // 解析 base64 data URI: data:image/jpeg;base64,xxx
+        const commaIdx = photoData.indexOf(',');
+        const mime = photoData.startsWith('data:') ? photoData.slice(5, commaIdx).split(';')[0] : 'image/jpeg';
+        const base64 = commaIdx >= 0 ? photoData.slice(commaIdx + 1) : photoData;
+        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+        result = new Response(bytes, {
+          headers: {
+            'Content-Type': mime,
+            'Cache-Control': 'public, max-age=604800',
+            'Access-Control-Allow-Origin': '*'
+          }
+        });
+      } else {
+        result = new Response('Not Found', { status: 404 });
+      }
+    }
+
+    // GET /api/workers/detail/:id（照片改为URL引用）
     else if (path.startsWith('/api/workers/detail/') && method === 'GET') {
       const id = path.split('/').pop();
       const worker = await getWorkerDetail(kv, id);
